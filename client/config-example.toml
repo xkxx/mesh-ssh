@@ -1,0 +1,59 @@
+
+# private port where sshd is listening at; usually 22
+private = 22
+
+# public port that is open to the internet. Note that if this port is
+# unavailable, a random port will be assigned instead
+public = 8888
+
+socket = "./meshssh.sock"
+
+[dyndns]
+
+# ### Dynamic DNS configuration ###
+
+# The software will automatically update
+# your dns to the external ip of the device if you have this option set
+
+enabled = false
+
+# type of service. options: `"noip"` (no-ip.com), `"dnsdyn"` (www.dnsdynamic.org)
+service = "dnsdyn"
+
+user = ""
+password = ""
+
+# hostname to update
+hostname = ""
+
+
+[watchserver]
+
+# ### WatchServer configuration ###
+
+# WatchServer coordinates peer connections and tracks peer availability and
+# optionally their locations
+
+enabled = true
+
+user = "your-username"
+privkey = "key.pem"
+
+	[watchserver.server]
+
+	host = "example.com"
+
+	# Server must be run on a https host
+	port = 443
+
+	[watchserver.aliases]
+
+	# ## Aliases ##
+
+	# Preconfigured aliases allow you to use the shorthand `mesh friend`
+	# instead of `mesh user@peer`
+	# For maximum conpatibility across unix shells, please use only
+	# alphanumeric characters, underscores '_', dashes '-' and dots '.'
+	# for aliases
+
+	# example = "example_user@random_peer" 

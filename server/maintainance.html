@@ -1,0 +1,52 @@
+<!DOCTYPE>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>MeshSSH Maintainance Panel</title>
+		<link rel="stylesheet" href="static/fontawesome.css" />
+		<link rel="stylesheet" href="static/core.css" />
+
+		<script src="static/jquery-1.9.1.min.js"></script>
+		<script src="static/core.js"></script>
+	</head>
+	<body>
+		<div class="wrapper" id="auth">
+			<form id="auth-form">
+				<h1>Authentication  <i class="icon-spinner hidden icon-spin"></i></h1>
+				<input type="password" size="20" placeholder="password" id="auth-pass"/>
+				<div id="auth_notif" class="notif hidden">Notification Area</div>
+				<button id="auth-btn" type="button">Enter</button>
+			</form>
+		</div>
+		<div class="wrapper" id="maintainance">
+			<form id="main-form">
+				<h1>Peer Management  <i class="icon-spinner hidden icon-spin"></i></h1>
+				<div id="panel_notif" class="notif">Notification Area</div>
+				<table>
+					<colgroup>
+						<col class="col-peer"/>
+						<col class="col-pubkey"/>
+						<col class="col-ip"/>
+						<col class="col-port"/>
+						<col class="col-online"/>
+						<col class="col-options"/>
+					</colgroup>
+					<tr id="table-top">
+						<th>Peer</th>
+						<th>Public Key</th>
+						<th>IP Address</th>
+						<th>Port</th>
+						<th>Online</th>
+						<th>Actions</th>
+					</tr>
+					<tr>
+						<td><input type="text" size="10" id="new_peer" placeholder="New Peer"/></td>
+						<td colspan="4"><input type="text" size="64" id="new_pubkey" placeholder="New Public Key"/></td>
+						<td><button id="add_peer" type="button"><i class="icon-plus-sign"></i></button></td>
+					</tr>
+				</table>
+
+			</form>
+		</div>
+	</body>
+</html>

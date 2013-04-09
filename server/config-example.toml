@@ -1,0 +1,39 @@
+# Server port
+
+port = 8080
+
+# Custom header that some PaaS uses to indicate client IP
+
+IPheader = ""
+
+# Initial password at server setup
+
+password = "admin"
+
+# ID byte length
+
+IDLength = 8 # 64bit
+
+# Length of salt used for generating id from user name
+
+saltLength = 8 # 64bit
+
+# Token expiration time
+
+tokenTTL = 300 # 5min
+tokenLength = 64 # 256bit
+
+# Hash related config
+
+hashIterations = 37
+hashLength = 64 # 256bit
+
+# Page size when listing peers
+
+pageSize = 50
+
+[redis]
+
+host = "127.0.0.1"
+port = 6379
+password = ""

@@ -1,0 +1,18 @@
+{
+  "name": "mesh-ssh-client",
+  "preferGlobal": true,
+  "version": "0.0.1",
+  "author": "xkxx <xukexiang@gmail.com>",
+  "description": "Remote access and device tracking utility",
+  "dependencies" : {
+    "ursa"       :  "0.8.x",
+    "nat-pmp"    :  "0.0.x",
+    "nat-upnp"   :  "0.2.x",
+    "netroute"   :  "0.2.x",
+    "colors"     :  "0.6.x",
+    "tomljs"     :  "0.1.x",
+    "commander"  :  "1.1.x",
+    "prettyjson" :  "0.8.x",
+    "wifiscanner":  "git://github.com/mauricesvay/node-wifiscanner.git"
+  }
+}

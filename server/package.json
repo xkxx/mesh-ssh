@@ -1,0 +1,11 @@
+{
+  "name": "mesh-ssh-server",
+  "version": "0.0.1",
+  "author": "xkxx <xukexiang@gmail.com>",
+  "description": "Remote access and device tracking utility",
+  "dependencies" : {
+    "ursa"     :  "0.8.x",
+    "redis"    :  "0.8.x",
+    "tomljs"   :  "0.1.x"
+  }
+}
