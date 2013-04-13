@@ -8,7 +8,7 @@ servers =
 	'dnsdyn':
 		'host': "www.dnsdynamic.org"
 		'path': "/api/"
-userAgent = "Free SSH/0.1 xkxiang@gmail.com"
+userAgent = "Mesh SSH/0.1 xkxiang@gmail.com"
 
 class DynDns
 	constructor: (options, @external) ->
@@ -33,7 +33,7 @@ class DynDns
 			notify(external)
 	notify: (external) ->
 		return if notifyTimeout + lastNotify > Date.now()
-		https.request(
+		https.get(
 			'host': servers[@service].host
 			'path': servers[@service].path + "?hostname=#{@hostname}&myip=#{external}"
 			'port': 443

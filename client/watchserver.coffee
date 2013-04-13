@@ -1,6 +1,9 @@
 fs = require('fs')
 https = require('https')
-crypto = require('ursa')
+# https = require('http')
+ursa = require('ursa')
+crypto = require('crypto')
+util = require('util')
 log = require './log'
 
 class WatchServer
@@ -18,50 +21,74 @@ class WatchServer
 
 		try
 			privkey = fs.readFileSync(privkeyPath)
-			@privkey = crypto.createPrivateKey(privkey)
-			@pubkey = crypto.createPublicKey(@privkey.toPublicPem())
+			@privkey = ursa.createPrivateKey(privkey)
 		catch err
 			log.error("[WatchServer] error reading '#{privkeyPath}': #{err}")
 			return
-		
-		@enabled = true
+
+		@generateID((err) =>
+			if err
+				log.error('[WatchServer] error generating user ID')
+			else
+				@enabled = true
+		)
 	notifyTimeout: 0
 	lastNotify: 0
 	pulse: (externalIp) ->
 		return if @notifyTimeout + @lastNotify > Date.now()
-		plaintext = JSON.stringify
+		@request(
 			'user': @user
 			'ip': externalIp
 			'port': @watcher.currentPort
-		cipherstring = @privkey.privateEncrypt(new Buffer(plaintext), 'utf8', 'base64')
-		log.debug https.request(
-			'host': @server.host
-			'port': @server.port or 443
-			'path': "/?content="+@toBase64url(cipherstring)
-			, (res) ->
+			, (res) =>
+				return if util.isError(res)
 				@lastNotify = Date.now()
-				if(res.statusCode isnt 200) 
-					log.error("[WatchServer] Unexpected pulse response")
+				if res.statusCode isnt 200 
+					log.error("[WatchServer] Unexpected pulse response, code", res.statusCode)
 					@notifyTimeout = 300*1000
 				)
 	getPeerInfo: (peer, callback) ->
-		plaintext = JSON.stringify
+		@request(
 			'user': @user
 			'peer': peer
-		cipherstring = @privkey.privateEncrypt(new Buffer(plaintext), 'utf8', 'base64')
-		https.request(
-			'host': server.host
-			'port': server.port or 443
-			'path': "/?content="+cipherstring.toString('base64')
 			, (res) =>
-				if(res.statusCode isnt 200)
-					log.error("[WATCHSERVER] Unexpected response to peer request")
+				if util.isError(res)
+					return callback(res)
+				if res.statusCode isnt 200
+					log.error("[WatchServer] Unexpected response to peer request, code", res.statusCode)
 					callback(true)
-				res.on('data', (data) ->
-					peerInfo = JSON.parse @pubkey.publicDecrypt(data, 'base64', 'utf8')
+				chunks = []
+				res.on('data', (chunk) =>
+					chunks.push(chunk)
+				)
+				res.on('end', =>
+					data = Buffer.concat(chunks)
+					peerInfo = JSON.parse @privkey.decrypt(data).toString('utf-8')
 					callback(false, peerInfo)
 				)
 			)
+	request: (json, res_cb) ->
+		cipherstring = @privkey.privateEncrypt new Buffer(JSON.stringify(json)), 'utf8'
+		req = https.get(
+			'host': @server.host
+			'port': @server.port or 443
+			'path': "/?id=#{@ID}&content=#{@toBase64url(cipherstring)}"
+			, res_cb
+			)
+		console.info("/?id=#{@ID}&content=#{@toBase64url(cipherstring)}")
+		req.on("error", (err) ->
+			log.error("[WatchServer] Network error: ", err)
+			res_cb(err)
+			)
+	generateID: (cb) ->
+		crypto.pbkdf2(@user, @server.host, @server.hashIterations, @server.IDLength, (err, data) =>
+			if err
+				log.error("[PBKDF2]Error: ", err)
+				cb(err)
+			else
+				@ID = @toBase64url(new Buffer(data))
+				cb(false)
+		)
 	toBase64url: (buffer) ->
 		buffer.toString('base64')
 			.replace(/\+/g, '-') # Convert '+' to '-'

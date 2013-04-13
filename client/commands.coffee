@@ -11,6 +11,88 @@ prettyjson = require('prettyjson')
 
 options = toml(fs.readFileSync('config.toml','utf-8'))
 
+connectPeer = (dest) ->
+	if not options.watchserver.enabled
+		console.error("""
+			WatchServer is not enabled
+			Please set 'enabled = true' in section [watchserver] of config.toml
+			If you wish to enable WatchServer
+			""")
+		return
+	peer = dest.match(/^([\w-\.]+)@([\w-\.]+)$/)
+	if not peer?
+		if options.watchserver.aliases[dest]
+			peer = options.watchserver.aliases[dest].match(/^([\w-\.]+)@([\w-\.]+)$/)
+			if not peer?
+				console.error("Invalid alias #{dest}")
+				printConnectUsage()
+				return
+		else
+			console.error("Invalid destination #{dest}")
+			printConnectUsage()
+			return
+
+	sshArgs = if program.sshOptions then program.sshOptions.split(' ') else []
+	sshArgs.unshift('-i', program.identity) if program.identity
+
+	IPCconnect(
+		'type': 'connect'
+		'peer': peer[2]
+		, (err, info) ->
+			return if err
+			console.info("Connecting to #{peer[1]}@#{info.ip}:#{info.port} ...\n")
+			sshArgs.unshift(info.ip, '-l', peer[1], '-p', info.port)
+			child_process.spawn('ssh', sshArgs, stdio: 'inherit')
+	)
+
+IPCconnect = (json, callback) ->
+	cbCalled = false
+	raw = ''
+	connection = net.connect(
+		'path': path.resolve(__dirname, options.socket)
+		'allowHalfOpen': true
+		)
+	connection.on('connect', () ->
+			connection.setNoDelay()
+			connection.setEncoding('utf-8')
+			connection.write JSON.stringify(json)
+			connection.end()
+	)
+	connection.on('data', (chunk) -> raw += chunk)
+	connection.on('end', =>
+		try
+			data = JSON.parse(raw)
+		catch err
+			console.error('Error connecting to backend:', err)
+			cbCalled = true
+			callback(err)
+		if data.status isnt 'success'
+			console.error('Backend Error:', data.error)
+			cbCalled = true
+			callback(data.error)
+		else
+			cbCalled = true
+			callback(false, data.data)
+	)
+	connection.on('error', (err) ->
+		console.error('Error connecting to backend:', err)
+		cbCalled = true
+		callback(err)
+	)
+
+printConnectUsage = () ->
+	console.info("""
+		connect usage:
+			connect username@peer
+			connect alias
+
+			username, peer and alias must contain only alphanumeric characters,
+			underscores '_', dashes '-' and dots '.'
+			Aliases can be configured in section [watchserver.aliases] of config.toml
+		""")
+
+# Command handling
+
 program
 	.version('0.0.1')
 	.option('-o, --ssh-options [options]', "other ssh options")
@@ -102,86 +184,6 @@ program.command('connect')
 program.command('*')
 	.description('connect to peer')
 	.action(connectPeer)
-
-connectPeer = (dest) ->
-	if not options.watchserver.enabled
-		console.error("""
-			WatchServer is not enabled
-			Please set 'enabled = true' in section [watchserver] of config.toml
-			If you wish to enable WatchServer
-			""")
-		return
-	peer = dest.match(/^([\w-\.]+)@([\w-\.]+)$/)
-	if not peer?
-		if options.watchserver.aliases[dest]
-			peer = options.watchserver.aliases[dest].match(/^([\w-\.]+)@([\w-\.]+)$/)
-			if not peer?
-				console.error("Invalid alias #{dest}")
-				printConnectUsage()
-				return
-		else
-			console.error("Invalid destination #{dest}")
-			printConnectUsage()
-			return
-
-	sshArgs = if program.sshOptions then program.sshOptions.split(' ') else []
-	sshArgs.unshift(['-i', program.identity]) if program.identity
-
-	IPCconnect(
-		'type': 'connect'
-		'peer': peer[2]
-		, (err, info) ->
-			return if err
-			console.info("Connecting to #{peer[1]}@#{info.ip}:#{info.port} ...\n")
-			sshArgs.unshift([info.ip, '-l', peer[1], '-p', info.port])
-			child_process.spawn('ssh', sshArgs, stdio: 'inherit')
-	)
-
-IPCconnect = (json, callback) ->
-	cbCalled = false
-	raw = ''
-	connection = net.connect(
-		'path': path.resolve(__dirname, options.socket)
-		'allowHalfOpen': true
-		)
-	connection.on('connect', () ->
-			connection.setNoDelay()
-			connection.setEncoding('utf-8')
-			connection.write JSON.stringify(json)
-			connection.end()
-	)
-	connection.on('data', (chunk) -> raw += chunk)
-	connection.on('end', =>
-		try
-			data = JSON.parse(raw)
-		catch err
-			console.error('Error connecting to backend:', err)
-			cbCalled = true
-			callback(err)
-		if data.status isnt 'success'
-			console.error('Backend Error:', data.error)
-			cbCalled = true
-			callback(data.error)
-		else
-			cbCalled = true
-			callback(false, data.data)
-	)
-	connection.on('error', (err) ->
-		console.error('Error connecting to backend:', err)
-		cbCalled = true
-		callback(err)
-	)
-
-printConnectUsage = () ->
-	console.info("""
-		connect usage:
-			connect username@peer
-			connect alias
-
-			username, peer and alias must contain only alphanumeric characters,
-			underscores '_', dashes '-' and dots '.'
-			Aliases can be configured in section [watchserver.aliases] of config.toml
-		""")
 
 program.parse(process.argv)
 

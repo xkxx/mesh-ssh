@@ -8,7 +8,7 @@ class Watcher
 	constructor: (@options) ->
 		@IPC = new IPC(@, options.socket)
 		@portMap = new PortMap(options)
-		@portMap.open((err, info) =>
+		@portMap.map((err, info) =>
 			if err
 				log.error('Port Mapping Failed'.red)
 				@watchServerOnly = true
@@ -36,5 +36,8 @@ class Watcher
 			if @watchServer.enabled
 				@watchServer.pulse(external)
 		)
+	# data properties
+	currentPort: null
+	externalIp: null
 
 exports.Watcher = Watcher

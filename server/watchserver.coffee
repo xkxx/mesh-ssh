@@ -11,7 +11,6 @@ queue = require('./queue')
 	Redis data structure
 	*	password        - JSON(salt, hash)
 	*	token:#token    - int(1)
-	*	id_salt         - string
 	*	peers           - hash(ID ,JSON(user, pubkey))
 	*	sortby:index    - zset(ID by index)
 	*	sortby:lastping - zset(ID by lastPing)
@@ -27,40 +26,21 @@ class WatchServer
 		@redis.auth(@config.redis.password) if @config.redis.password isnt ""
 		startup = queue()
 		startup.defer((cb) =>
-			@redis.on('ready', =>
-				@redis.get('id_salt', (err, data) =>
-					throw "Error reading from Redis database: #{err}" if err
-					if not data
-						crypto.randomBytes(@config.saltLength, (err, salt) =>
-							throw "Error generating ID salt: #{err}" if err
-							@redis.set('id_salt', salt.toString('base64'), (err, data) =>
-								throw "Error reading from Redis database: #{err}" if err
-								@IDSalt = salt
-								cb(false)
-							)
-						)
-					else
-						@IDSalt = new Buffer(data, 'base64')
-						cb(false)
-				)
-			)
-		, queue.D)
-		startup.defer((cb) =>
 			fs.readFile('./maintainance.html', (err, data) =>
 				throw "Error reading back-end maintainance.html: #{err}" if err
 				@maintainance = data
 				cb()
 			)
 		, queue.D)
-		for i in fs.readdirSync('./static/')
+		fs.readdirSync('./static/').forEach((item) =>
 			startup.defer((cb) =>
-				filename = i
-				fs.readFile('./static/'+filename, (err, data) =>
-					throw "Error reading static file #{filename}: #{err}" if err
-					@static[filename] = data
+				fs.readFile('./static/'+item, (err, data) =>
+					throw "Error reading static file #{item}: #{err}" if err
+					@static[item] = data
 					cb()
 				)
 			, queue.D)
+		)
 		startup.await( =>
 			@server = http.createServer(@request)
 			@server.listen(@config.port)
@@ -106,17 +86,18 @@ class WatchServer
 				@decryptPulse(urlInfo.query.id, urlInfo.query.content, (errCode, pubkey, message) =>
 					if errCode
 						res.writeHead(errCode)
-					else if message.peer
+					else if message.peer # peer request
 						if(@conDB[message.peer])
-							data = Object.create(@conDB[message.peer])
+							data = @shallowClone @conDB[message.peer]
 							delete data.pubkey
-							response = @pubkey.publicEncrypt JSON.stringify(data), 'utf8', 'base64'
+							response = @conDB[message.peer].pubkey.encrypt JSON.stringify(data), 'utf8'
 							res.writeHead(200)
 							return res.end(response)
 						else
 							res.writeHead(404)
 					else
 						detectedIP = if @config.IPheader then req.headers[@config.IPheader] else req.connection.remoteAddress
+						message.ip ||= detectedIP
 						if detectedIP isnt message.ip
 							res.writeHead(409)
 						else
@@ -212,11 +193,32 @@ class WatchServer
 									console.error("[Redis]Error: ", err)
 									return res.writeHead(500)
 								result = []
-								for i in data
-									info = JSON.parse(i)
-									result.push(@conDB[info.user] or info)
-								res.writeHead(200)
-								res.end(JSON.stringify(result))
+								tasks = queue()
+								for item, index in data
+									info = JSON.parse(item)
+									if @conDB[info.user]
+										peer = @shallowClone @conDB[info.user]
+										peer.pubkey = peer.pubkey.toPublicPem('base64')
+										result.push(peer)
+									else
+										tasks.defer((cb) =>
+											peer = info
+											@redis.zscore('sortby:lastping', list[index], (err, lastPing) =>
+												cb(err) if err
+												peer.lastPing = parseInt(lastPing, 10)
+												result.push(info)
+												cb(false)
+											)
+										, queue.D)
+								tasks.await((err) =>
+									if err
+										console.error("[Redis]Error: ", err)
+										res.writeHead(500)
+										res.end()
+									else
+										res.writeHead(200)
+										res.end(JSON.stringify(result))
+								)
 							)
 					)
 				)
@@ -301,7 +303,7 @@ class WatchServer
 						res.writeHead(400)
 						return res.end()
 					else
-						crypto.randomBytes(@config.hashLength, (err, salt) =>
+						crypto.randomBytes(@config.security.hashLength, (err, salt) =>
 							if err
 								console.error('[RandomBytes]Error: ', err)
 								res.writeHead(500)
@@ -321,19 +323,9 @@ class WatchServer
 								)
 						)
 				)
+
 	decryptPulse: (id, ciphertext, cb) ->
-		if @idDB[id]
-			decrypt(@idDB[id])
-		else
-			@redis.hget("peers", id, (err, data) =>
-				if err
-					console.error("[Redis]Error: ", err)
-					cb(500)
-				else
-					user = JSON.parse(data)
-					@idDB[id] = user
-					decrypt(user)
-			)
+
 		decrypt = (user) ->
 			pubkey = ursa.createPublicKey(user.pubkey, 'utf8')
 			message = JSON.parse pubkey.publicDecrypt(ciphertext, 'base64', 'utf8')
@@ -342,13 +334,28 @@ class WatchServer
 			else
 				cb(false, pubkey, message)
 
+		if @idDB[id]
+			decrypt(@idDB[id])
+		else
+			@redis.hget("peers", id, (err, data) =>
+				if err
+					console.error("[Redis]Error: ", err)
+					cb(500)
+				else if data is null
+					cb(404)
+				else
+					user = JSON.parse(data)	
+					@idDB[id] = user
+					decrypt(user)
+			)
+
 	generateToken: (cb) ->
-		crypto.randomBytes(@config.tokenLength, (err, tokenBuffer) =>
+		crypto.randomBytes(@config.security.tokenLength, (err, tokenBuffer) =>
 			if err
 				console.error("[RandomBytes]Error: ", err)
 				return cb(err)
 			token = @toBase64url(tokenBuffer)
-			@redis.setex("token:#{token}", @config.tokenTTL, 1, (err) =>
+			@redis.setex("token:#{token}", @config.security.tokenTTL, 1, (err) =>
 				if err
 					console.error("[Redis]Error: ", err)
 				else
@@ -356,7 +363,7 @@ class WatchServer
 			)
 		)
 	generateHash: (content, salt, cb) ->
-		crypto.pbkdf2(content, salt, @config.hashIterations, @config.hashLength, (err, hash) =>
+		crypto.pbkdf2(content, salt, @config.security.hashIterations, @config.security.hashLength, (err, hash) =>
 			if err
 				console.error("[PBKDF2]Error: ", err)
 				cb(err)
@@ -364,12 +371,12 @@ class WatchServer
 				cb(false, data.toString('base64'))
 		)
 	generateID: (user, cb) ->
-		crypto.pbkdf2(user, @IDSalt, @config.hashIterations, @config.IDLength, (err, data) =>
+		crypto.pbkdf2(user, @config.hostname, @config.security.hashIterations, @config.security.IDLength, (err, data) =>
 			if err
 				console.error("[PBKDF2]Error: ", err)
 				cb(err)
 			else
-				cb(false, new Buffer(data).toString('base64'))
+				cb(false, @toBase64url new Buffer(data))
 		)
 	# RFC 4648 base64url encoding
 	toBase64url: (buffer) ->
@@ -377,10 +384,15 @@ class WatchServer
 			.replace(/\+/g, '-') # Convert '+' to '-'
 			.replace(/\//g, '_') # Convert '/' to '_'
 			.replace(/\=+$/, '') # Remove ending '='
+	shallowClone: (obj) ->
+		# shallowly clone a data object, disregard prototypes
+		clone = {}
+		clone[i] = obj[i] for own i of obj
+		return clone
 	checkToken: (token, cb) ->
 		if not token
 			cb(false, false)
-		@redis.expire("token:#{decodeURIComponent(token)}", @config.tokenTTL, (err, data) =>
+		@redis.expire("token:#{decodeURIComponent(token)}", @config.security.tokenTTL, (err, data) =>
 			if err
 				console.error("[Redis]Error: ", err)
 				cb(err)

@@ -6,7 +6,6 @@ var forceReset = false;
 
 $(function(){
 	token = localStorage.getItem('token');
-	notif = $('.notif');
 	$('#maintainance').css('margin-top', -$('#maintainance').height()/2);
 	if(token !== null) {
 		toggleLoading();
@@ -125,19 +124,23 @@ var returnToLogin = function() {
 var reloadUsers = function(cb) {
 	$.getJSON('/ajax/list?token='+token, function(data) {
 		if(!data) {
-			return $('#auth_notif').text("Please try again later.");
+			return showNotif("Please try again later.");
 		}
 		var table_top = $('#table-top');
 		data.forEach(function(item) {
 			var user = decodeURIComponent(item.user);
-			table_top.after('<tr><td><i class="icon-user"></i> '+ user +'</td><td>' +
-				item.pubkey + '</td><td>' +
-				item.ip + '</td><td>' +
-				item.port + '</td><td>' +
-				(Date.now() - item.lastPing < 60*1000 ? '<i class="icon-signal"></i>' : '<i class="icon-ban-circle"></i>') +
-				'</td><td><button class="remove-peer" type="button" data-peer="'+ user +
-				'"><i class="icon-remove-sign"></i></button></td></tr>'
-			);
+			console.info(item);
+			var tr = '<tr>';
+				tr += '<td><i class="icon-user"></i> '+ user +'</td>';
+				tr += '<td>' + item.pubkey + '</td>';
+				tr += '<td>' + (item.ip || '--') + '</td>';
+				tr += '<td>' + (item.port || '--') + '</td>';
+				tr += '<td title="Last Ping: ' + new Date(item.lastPing) + '"><i class="' +
+					(Date.now() - item.lastPing < 60*1000 ? 'icon-signal' : 'icon-ban-circle') +
+					'"></i></td>';
+				tr += '<td><button class="remove-peer" type="button" data-peer="' + user +
+				'"><i class="icon-remove-sign"></i></button></td></tr>';
+			table_top.after(tr);
 		});
 		if(cb) {
 			cb();
@@ -159,11 +162,11 @@ var toggleLoading = function() {
 	$('.icon-spinner').toggleClass('hidden');
 };
 
-var notif;
 var showNotif = function(text) {
+	var notif = $('.notif');
 	notif.removeClass('hidden');
 	notif.text(text);
 };
 var clearNotif = function() {
-	notif.addClass('hidden');
+	$('.notif').addClass('hidden');
 };

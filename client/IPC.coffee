@@ -15,9 +15,15 @@ class IPC
 and then delete #{path.resolve(__dirname, sockPath)}".red)
 				process.exit(1)
 		)
-		process.on('exit', ->
+		process.on('exit', =>
 			try @server.close()
 			)
+		for signal in ['exit', 'SIGINT', 'SIGTERM', 'SIGQUIT']
+			process.on(signal, =>
+				try
+					@server.close()
+					process.exit(0)
+				)
 	listener: (connection) ->
 		connection.setNoDelay()
 		connection.setEncoding('utf-8')
@@ -61,7 +67,7 @@ and then delete #{path.resolve(__dirname, sockPath)}".red)
 									"data":
 										"port-map": if @watcher.currentPort then true else false
 										"current-port": @watcher.currentPort
-										"exteral-ip": @watcher.exteralIp
+										"external-ip": @watcher.externalIp
 								))
 				else
 					log.error("[IPC] recognized request:", data.type)

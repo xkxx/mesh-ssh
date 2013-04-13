@@ -16,9 +16,6 @@ class PortMap
             pmp: natpmp.connect(options.gateway),
             upnp: natupnp.createClient()
 
-    open: (options, callback) ->
-        @map(options, callback)
-
     externalIp: (callback) ->
         @_connect((err, client, external) -> callback(err, external))
 
