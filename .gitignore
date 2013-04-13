@@ -1,0 +1,5 @@
+client/node_modules/*
+client/config.toml
+server/node_modules/*
+server/config.toml
+server/*.rdb
