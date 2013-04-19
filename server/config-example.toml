@@ -1,3 +1,9 @@
+# location of server. Used as salt for generating user ID
+
+production = true
+
+hostname = "127.0.0.1"
+
 # Server port
 
 port = 8080
@@ -6,9 +12,27 @@ port = 8080
 
 IPheader = ""
 
-# Initial password at server setup
+# Initial password at server setup. Will be reset after first run
 
 password = "admin"
+
+
+# Page size when listing peers
+
+pageSize = 50
+
+[redis]
+
+# ### Redis datastore configuration ###
+
+host = "127.0.0.1"
+port = 6379
+password = ""
+
+[security]
+
+# ### Security Related configuration ###
+# Don't mess with these unless you know what you are doing!!
 
 # ID byte length
 
@@ -27,13 +51,3 @@ tokenLength = 64 # 256bit
 
 hashIterations = 37
 hashLength = 64 # 256bit
-
-# Page size when listing peers
-
-pageSize = 50
-
-[redis]
-
-host = "127.0.0.1"
-port = 6379
-password = ""

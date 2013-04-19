@@ -41,10 +41,16 @@ privkey = "key.pem"
 
 	[watchserver.server]
 
-	host = "example.com"
+	host = "127.0.0.1"
 
 	# Server must be run on a https host
-	port = 443
+	port = 8080
+
+	# Don't mess with these configs. Make sure they are identical to
+	# the corresponding server configs.
+
+	IDLength = 8 # 64bit
+	hashIterations = 37
 
 	[watchserver.aliases]
 

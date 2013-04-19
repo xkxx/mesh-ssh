@@ -5,6 +5,7 @@ ursa = require('ursa')
 url = require('url')
 redis = require('redis')
 toml = require('tomljs')
+buffet_lib = require('buffet')
 queue = require('./queue')
 
 ###
@@ -24,36 +25,11 @@ class WatchServer
 		throw "Config missing" if not @config
 		@redis = redis.createClient(@config.redis.port, @config.redis.host)
 		@redis.auth(@config.redis.password) if @config.redis.password isnt ""
-		startup = queue()
-		startup.defer((cb) =>
-			fs.readFile('./maintainance.html', (err, data) =>
-				throw "Error reading back-end maintainance.html: #{err}" if err
-				@maintainance = data
-				cb()
-			)
-		, queue.D)
-		fs.readdirSync('./static/').forEach((item) =>
-			startup.defer((cb) =>
-				fs.readFile('./static/'+item, (err, data) =>
-					throw "Error reading static file #{item}: #{err}" if err
-					@static[item] = data
-					cb()
-				)
-			, queue.D)
-		)
-		startup.await( =>
-			@server = http.createServer(@request)
-			@server.listen(@config.port)
-		)
+		@buffet = buffet_lib({root: if @config.production is true then './static' else './bootplate'})
+		@server = http.createServer(@request)
+		@server.listen(@config.port)
 
 	valid_base64: /^[\w\+=/]+$/
-	MIME:
-		'js': 'application/javascript'
-		'css': 'text/css'
-		'afm': 'application/x-font-afm'
-		'ttf': 'application/x-font-ttf'
-		'eot': 'application/vnd.ms-fontobject'
-		'woff': 'application/font-woff'
 
 	request: (req, res) =>
 		###
@@ -66,23 +42,15 @@ class WatchServer
 		###
 		console.info req.url
 		urlInfo = url.parse(req.url, true)
-		if urlInfo.pathname[0..7] == '/static/'
-			filename = decodeURIComponent(urlInfo.pathname)[8..]
-			if not @static[filename]
-				res.writeHead(404)
-				return res.end()
-			extension = filename[filename.lastIndexOf('.')+1..]
-			res.writeHead(200,
-				'content-type': @MIME[extension]
-				'content-length': @static[filename].length
-			)
-			return res.end(@static[filename])
 		switch urlInfo.pathname
 			when '/'
 				lastPing = Date.now()
 				unless urlInfo.query.id and urlInfo.query.content
-					res.writeHead(400)
-					return res.end()
+					if req.headers['user-agent']
+						return @buffet(req, res)
+					else
+						res.writeHead(400)
+						return res.end()
 				@decryptPulse(urlInfo.query.id, urlInfo.query.content, (errCode, pubkey, message) =>
 					if errCode
 						res.writeHead(errCode)
@@ -108,12 +76,6 @@ class WatchServer
 						@redis.zadd('sortby:lastping', lastPing, urlInfo.query.id)
 					res.end()
 				)
-			when '/maintainance'
-				res.writeHead(200,
-					'content-type': "text/html"
-					'content-length': @maintainance.length
-				)
-				res.end(@maintainance)
 			when '/ajax/auth'
 				if urlInfo.query.password
 					@redis.get("password", (err, data) =>
@@ -148,6 +110,7 @@ class WatchServer
 											res.writeHead(500)
 											res.end()
 										else
+											console.info('sending reply:', token)
 											res.end(JSON.stringify
 												'token': token
 											)
@@ -222,7 +185,6 @@ class WatchServer
 							)
 					)
 				)
-
 			when '/ajax/add_peer'
 				@checkToken(urlInfo.query.token, (err, state) =>
 					if err
@@ -323,6 +285,9 @@ class WatchServer
 								)
 						)
 				)
+			else
+				@buffet(req, res)
+
 
 	decryptPulse: (id, ciphertext, cb) ->
 
