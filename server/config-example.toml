@@ -1,12 +1,14 @@
 # location of server. Used as salt for generating user ID
 
-production = true
-
 hostname = "127.0.0.1"
 
 # Server port
 
 port = 8080
+
+# Whether to use https. Use 'false' if you are running the server on a PaaS
+
+secure = true
 
 # Custom header that some PaaS uses to indicate client IP
 
@@ -16,10 +18,13 @@ IPheader = ""
 
 password = "admin"
 
-
 # Page size when listing peers
 
 pageSize = 50
+
+# always set this to true
+
+production = true
 
 [redis]
 

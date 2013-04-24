@@ -19,6 +19,31 @@ class PortMap
     externalIp: (callback) ->
         @_connect((err, client, external) -> callback(err, external))
 
+    getLanInfo: () ->
+        interfaces = os.networkInterfaces()
+        gateway = @getGateway()
+        if gateway[0]?
+            IPFamily = gateway[1]
+            for addresses of interfaces
+                for address in addresses
+                    if address.internal is false and address.family is IPFamily
+                        return [gateway[0], address.address]
+                        
+        return [null, null]
+
+    # we dispatch getGateway() to include the type of address
+    getGateway: (_interface) ->
+        info = netroute.getInfo()
+        def = info.IPv4.filter (route) ->
+            return route.destination is '0.0.0.0' and (not _interface or route.interface is _interface)
+
+        return [def[0].gateway, 'IPv4'] if def.length isnt 0
+
+        def = info.IPv6.filter (route) ->
+            return route.destination is '::0' and (not _interface or route.interface is _interface)
+
+        return if def[0] then [def[0].gateway, 'IPv6'] else [null]
+
     map: (callback) ->
         options = @options
         callback = callback || ->

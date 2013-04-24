@@ -6,6 +6,12 @@ private = 22
 # unavailable, a random port will be assigned instead
 public = 8888
 
+# This option, when enabled, prevents the problem from performing 
+# UPnP/NAT-PMP port mapping. Useful when you have already set up port
+# forwarding on your router.
+
+disable_port_maping = false
+
 socket = "./meshssh.sock"
 
 [dyndns]
@@ -39,6 +45,10 @@ enabled = true
 user = "your-username"
 privkey = "key.pem"
 
+# always set this option to true
+
+production = true
+
 	[watchserver.server]
 
 	host = "127.0.0.1"
@@ -62,4 +72,4 @@ privkey = "key.pem"
 	# alphanumeric characters, underscores '_', dashes '-' and dots '.'
 	# for aliases
 
-	# example = "example_user@random_peer" 
+	# example = "example_user@random_peer"

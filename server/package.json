@@ -7,6 +7,7 @@
     "ursa"     :  "0.8.x",
     "redis"    :  "0.8.x",
     "tomljs"   :  "0.1.x",
-    "buffet"   :  "0.5.x"
+    "buffet"   :  "0.5.x",
+    "socket.io"   :  "0.9.x"
   }
 }

@@ -13,6 +13,6 @@
     "tomljs"     :  "0.1.x",
     "commander"  :  "1.1.x",
     "prettyjson" :  "0.8.x",
-    "wifiscanner":  "git://github.com/mauricesvay/node-wifiscanner.git",
+    "wifiscanner":  "git://github.com/mauricesvay/node-wifiscanner.git"
   }
 }

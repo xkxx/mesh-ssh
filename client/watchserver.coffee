@@ -1,10 +1,13 @@
 fs = require('fs')
+http = require('http')
 https = require('https')
-# https = require('http')
 ursa = require('ursa')
 crypto = require('crypto')
 util = require('util')
+querystring = require('querystring')
+wifiScanner = require('node-wifiscanner')
 log = require './log'
+
 
 class WatchServer
 	constructor: (options, @watcher) ->
@@ -34,52 +37,115 @@ class WatchServer
 		)
 	notifyTimeout: 0
 	lastNotify: 0
+	tracking: false
 	pulse: (externalIp) ->
-		return if @notifyTimeout + @lastNotify > Date.now()
+		if @tracking is true
+			# If @tracking is true, we send data every pulse regardless of whether the server is responding
+			@getGeoLocation((err, geoLocation) =>
+				if err
+					@sendPulse(externalIp)
+				else
+					@sendPulse(externalIp, geoLocation)
+			)
+		else
+			return if @notifyTimeout + @lastNotify > Date.now()
+			@sendPulse(externalIp)
+	sendPulse: (externalIp, geoLocation) ->
 		@request(
 			'user': @user
 			'ip': externalIp
-			'port': @watcher.currentPort
-			, (res) =>
-				return if util.isError(res)
+			'lan_ip': @watcher.lanIP
+			'lan_gateway': @watcher.gateway
+			'port': @watcher.currentPort,
+			'internal_port': @watcher.internalPort
+			'geo_location': geoLocation
+			, (err, statusCode, data) =>
 				@lastNotify = Date.now()
-				if res.statusCode isnt 200 
-					log.error("[WatchServer] Unexpected pulse response, code", res.statusCode)
-					@notifyTimeout = 300*1000
-				)
+				if err or statusCode isnt 200 
+					log.error("[WatchServer] Unexpected pulse response, code", statusCode)
+					@notifyTimeout = 120*1000
+				else
+					@notifyTimeout = 0
+				if data?
+					@tracking = data.tracking || false
+		)
 	getPeerInfo: (peer, callback) ->
 		@request(
 			'user': @user
 			'peer': peer
-			, (res) =>
-				if util.isError(res)
-					return callback(res)
-				if res.statusCode isnt 200
-					log.error("[WatchServer] Unexpected response to peer request, code", res.statusCode)
+			, (err, statusCode, data) ->
+				if err
+					callback(err)
+				else if statusCode isnt 200
+					log.error("[WatchServer] Unexpected response to peer request, code", statusCode)
 					callback(true)
-				chunks = []
-				res.on('data', (chunk) =>
-					chunks.push(chunk)
-				)
-				res.on('end', =>
-					data = Buffer.concat(chunks)
-					peerInfo = JSON.parse @privkey.decrypt(data).toString('utf-8')
-					callback(false, peerInfo)
-				)
+				else
+					callback(false, data)
 			)
-	request: (json, res_cb) ->
+	request: (json, callback) ->
 		cipherstring = @privkey.privateEncrypt new Buffer(JSON.stringify(json)), 'utf8'
-		req = https.get(
+		req = http.get(
 			'host': @server.host
 			'port': @server.port or 443
 			'path': "/?id=#{@ID}&content=#{@toBase64url(cipherstring)}"
-			, res_cb
+			, (res) ->
+				chunks = []
+				res.on('data', (chunk) ->
+					chunks.push(chunk)
+				)
+				res.on('end', =>
+					try 
+						if chunks.length > 0
+							cryptoText = Buffer.concat(chunks)
+							clearText = JSON.parse @privkey.decrypt(cryptoText).toString('utf-8')
+						callback(false, res.statusCode, clearText)
+					catch err
+						log.error("[WatchServer] Decrypt/JSON error: ", err)
+						callback(err)
+				)
 			)
 		console.info("/?id=#{@ID}&content=#{@toBase64url(cipherstring)}")
 		req.on("error", (err) ->
 			log.error("[WatchServer] Network error: ", err)
-			res_cb(err)
+			callback(err)
 			)
+	getGeoLocation: (cb) ->
+		maxCells = 10
+		wifiscanner.scan((err, result) ->
+			if err
+				log.error("[GeoLocation] Scan Error: ", err)
+				return cb(err)
+			cells = ("wifi=mac:#{i.mac}|ssid:#{i.ssid}|ss:#{i.signal_level}" for i in result[0...10]).join('&')
+			###
+				Here we bootleg Google's browser GeoLocation API for the following reasons:
+				* This tracking feature is only enabled in emergency occations.
+				* Google's official API requires billing and is limited to 200 calls/day. 
+				* It makes no sense signing up for billing for something that may never be used,
+				and when disaster strikes 200 calls/day is simply not enough
+			###
+			https.get(
+				'host': 'maps.googleapis.com'
+				'port': 443,
+				'path': "/maps/api/browserlocation/json?browser=firefox&sensor=true&" + cells
+				, (res) ->
+					res.setEncoding('utf-8')
+					data = ''
+					res.on('data', (chunk) ->
+						data += chunk
+					)
+					res.on('end', ->
+						try
+							location = JSON.parse(data)
+							callback(false, location)
+						catch err
+							log.error("[GeoLocation] JSON error: ", err)
+							cb(err)
+					)
+			).on('error', (err) ->
+				log.error("[GeoLocation] Network error: ", err)
+				cb(err)
+			)
+		)
 	generateID: (cb) ->
 		crypto.pbkdf2(@user, @server.host, @server.hashIterations, @server.IDLength, (err, data) =>
 			if err

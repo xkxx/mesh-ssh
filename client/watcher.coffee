@@ -6,9 +6,7 @@ log = require('./log')
 
 class Watcher
 	constructor: (@options) ->
-		@IPC = new IPC(@, options.socket)
-		@portMap = new PortMap(options)
-		@portMap.map((err, info) =>
+		_portMapCallback = (err, info) =>
 			if err
 				log.error('Port Mapping Failed'.red)
 				@watchServerOnly = true
@@ -21,12 +19,20 @@ class Watcher
 
 			@watchServer = new WatchServer(options.watchserver, @)
 
-			@interval = setInterval(@pulse.bind(@), 30*1000)
-		)
+		@interval = setInterval(@pulse, 30*1000)
+		@internalPort = options.private
+		@IPC = new IPC(@, options.socket)
+		@portMap = new PortMap(options)
+		if options.disable_port_maping is true
+			@_portMapCallback(false, public: options.public)
+		else
+			@portMap.map(_portMapCallback)
 
-	pulse: ->
-		@watchServer.pulse() if @watchServerOnly and @watchServer.enabled
+	pulse: =>
 		log.debug('pulse')
+		[@lanIP, @gateway] = @portMap.getLanInfo()
+		@watchServer.pulse() if @watchServerOnly and @watchServer.enabled
+		
 		@portMap.externalIp((err, external) =>
 			@externalIp = external
 			if err

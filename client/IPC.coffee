@@ -58,7 +58,8 @@ and then delete #{path.resolve(__dirname, sockPath)}".red)
 								log.info("[IPC] CLI requested info about peer #{data.peer}")
 								connection.end(JSON.stringify(
 									"status": "success"
-									"data": info 
+									"data": info
+									"local-gateway": @watcher.gateway
 								))
 						)
 				when 'status'

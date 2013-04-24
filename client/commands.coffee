@@ -11,6 +11,16 @@ prettyjson = require('prettyjson')
 
 options = toml(fs.readFileSync('config.toml','utf-8'))
 
+sshConnect = (user, ip, port, sshArgs) ->
+	console.info("Connecting to #{user}@#{ip}:#{port} ...\n")
+
+	sshArgs.unshift(ip, '-l', user, '-p', port)
+
+	ssh = child_process.spawn('ssh', sshArgs, stdio: 'inherit')
+	ssh.on('close', (code) ->
+		console.info("\nSSH session terminated with code #{code}.")
+	)
+
 connectPeer = (dest) ->
 	if not options.watchserver.enabled
 		console.error("""
@@ -34,15 +44,31 @@ connectPeer = (dest) ->
 
 	sshArgs = if program.sshOptions then program.sshOptions.split(' ') else []
 	sshArgs.unshift('-i', program.identity) if program.identity
+	# to prevent ssh from complaining about IP address changes
+	sshArgs.unshift('-o', "HostKeyAlias=#{peer[1]}@#{peer[2]}",
+					'-o', "CheckHostIP=no"
+		)
 
 	IPCconnect(
 		'type': 'connect'
 		'peer': peer[2]
 		, (err, info) ->
 			return if err
-			console.info("Connecting to #{peer[1]}@#{info.ip}:#{info.port} ...\n")
-			sshArgs.unshift(info.ip, '-l', peer[1], '-p', info.port)
-			child_process.spawn('ssh', sshArgs, stdio: 'inherit')
+			if info.data.lan_gateway is info.data.local_gateway
+				console.info("""
+					It seems that we are located in the same LAN network.
+					Trying to connect with lan address ...
+					""")
+				sshConnect(peer[1], info.data.lan_ip, info.data.internal_port, sshArgs)
+			else if info.data.port
+				sshConnect(peer[1], info.data.ip, info.data.port, sshArgs)
+			else
+				console.error("""
+						Peer did not report a public port number.
+						They probably couldn't get their port forwarded by the router.
+						Sorry about that.
+						""")
+			
 	)
 
 IPCconnect = (json, callback) ->
@@ -72,7 +98,7 @@ IPCconnect = (json, callback) ->
 			callback(data.error)
 		else
 			cbCalled = true
-			callback(false, data.data)
+			callback(false, data)
 	)
 	connection.on('error', (err) ->
 		console.error('Error connecting to backend:', err)
@@ -173,7 +199,7 @@ program.command('status')
 			'type': "status",
 			(err, info) ->
 				return if err
-				console.info prettyjson.render(info)
+				console.info prettyjson.render(info.data)
 			)
 	)
 
